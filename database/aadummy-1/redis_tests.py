@@ -15,7 +15,7 @@ r1 = redis1.Redis(host="localhost", port=6379, decode_responses=True)
 async def get_events_for_user_fast(user_id: str):
     start = time.perf_counter()
 
-    user_key = f"user:{user_id}"
+    user_key = f"user:{user_id}:batches"
     user_data = await r1.json().get(user_key)
     
     if not user_data or "batch_ids" not in user_data:

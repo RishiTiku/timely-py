@@ -1,22 +1,57 @@
-from ..models import Batch
-from typing import Type, Optional, List, Union, Dict
-from database.utils import find_all, P
-from ..utils import create_one, create_many, fetch_entity_map
-from beanie import Document
-from ..models import BatchIdNameCode as BatchProjection
-from bson import ObjectId
+from beanie import PydanticObjectId
+from database.models import Batch, Event  # Adjust your imports
+import time
+from typing import List
+def get_pipeline(batch_id: PydanticObjectId):
+    pipeline = [
+            {"$match": {"_id": batch_id}},
+            {"$lookup": {
+                "from": "Events",
+                "localField": "events",  # Batch.events is list of event IDs
+                "foreignField": "_id",
+                "as": "event_docs"
+            }},
+            {"$unwind": "$event_docs"},
+            {"$lookup": {
+                "from": "Users",
+                "localField": "event_docs.faculties",
+                "foreignField": "_id",
+                "as": "event_docs.faculty_docs"
+            }},
+            {"$addFields": {
+                "event_docs.faculty_names": {
+                    "$map": {
+                        "input": "$event_docs.faculty_docs",
+                        "as": "faculty",
+                        "in": "$$faculty.name"
+                    }
+                }
+            }},
+            {"$project": {
+                "event_docs.faculty_docs": 0
+            }},
+            # Use $replaceRoot to output event_docs fields as top-level doc in the pipeline
+            {"$replaceRoot": {"newRoot": "$event_docs"}}
+        ]
+    return pipeline
 
-async def create_batch(batch_data: dict) -> Optional[Document]:
-    return await create_one(Batch, batch_data)
+async def get_events_with_faculty_names_for_batch(batch_id: PydanticObjectId):
+    events = await Batch.get_motor_collection().aggregate(get_pipeline(batch_id)).to_list()
+    events = [Event(**e) for e in events]
+    return events
 
-async def create_batches(batches_data: list[dict]) -> Optional[List[Document]]:
-    return await create_many(Batch, batches_data)
-
-async def find_all_batches(projection_model: Optional[Type[P]] = None, write_to_file: bool = False) -> Optional[List[Union[Batch, P]]]:
-    return await find_all(Batch, projection_model, write_to_file)
-    
-async def add_user_to_batch(batch_user_map: dict):
-    pass
-
-async def fetch_batch_map(batch_ids: List[ObjectId], projection_model: Optional[Type[P]] = None, with_children: bool = True) -> Dict[ObjectId, Union[P, Document]]:
-    return await fetch_entity_map(batch_ids, Batch, projection_model, with_children)
+async def explain_events_with_faculty_names_for_batch(batch_id: PydanticObjectId):
+    collection = Batch.get_motor_collection()
+    command = {
+        "explain": {
+            "aggregate": collection.name,
+            "pipeline": get_pipeline(batch_id),
+            "cursor": {}
+        },
+        "verbosity": "executionStats"
+    }
+    start = time.perf_counter()
+    explain_plan = await collection.database.command(command)
+    end = time.perf_counter()
+    print(f"{end-start:.6f}")
+    # return explain_plan

@@ -6,6 +6,7 @@ import asyncio
 from beanie import init_beanie, Document
 import database.models as models_module
 import inspect
+from redis.asyncio import Redis, RedisError
 
 # Load environment variables
 load_dotenv()
@@ -28,6 +29,8 @@ MONGO_URI = "mongodb://localhost:27017"
 client = AsyncIOMotorClient(
     MONGO_URI
 )
+
+redis_client = Redis(host="localhost", port=6379, decode_responses=True)
 
 def get_connection():
     if not DB_NAME:
@@ -63,6 +66,16 @@ async def connect_db():
         )
     except Exception as error:
         print(f"MongoDB connection failed: {error}")
+        raise
+
+async def connect_redis() -> Redis:
+    try:
+        pong = await redis_client.ping()
+        if pong:
+            print("Redis connected successfully!")
+        return redis_client
+    except RedisError as error:
+        print(f"Redis Connection Failed: {error}")
         raise
 
 # Disconnect from MongoDB

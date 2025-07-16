@@ -2,11 +2,12 @@ from ..core import BaseDocument
 from pydantic import Field
 from typing import List, Optional
 from ..embedded import EventId
+from beanie import PydanticObjectId
 from bson import ObjectId
 
 class Room(BaseDocument):
     code: str = Field(..., description="Room code")
-    events: Optional[List[EventId]] = Field(default=[], description="Events associated with the Room")
+    events: Optional[List[PydanticObjectId]] = Field(default=[], description="Events associated with the Room")
     
     class Settings:
         name = "Rooms"
